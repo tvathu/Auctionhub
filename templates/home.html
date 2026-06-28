@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="text-center py-5">
+    <h1 class="display-4">Welcome to AuctionHub 🏷️</h1>
+    <p class="lead">Bid on unique items or list your own products for auction.</p>
+    <a href="{% url 'auction_list' %}" class="btn btn-dark btn-lg me-2">Browse Auctions</a>
+    {% if not user.is_authenticated %}
+        <a href="{% url 'register' %}" class="btn btn-outline-dark btn-lg">Get Started</a>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,175 @@
+{% extends 'base.html' %}
+{% block title %}Payment — {{ auction.product.title }}{% endblock %}
+{% block content %}
+
+<div class="row justify-content-center mt-4">
+    <div class="col-md-7">
+
+        <!-- Order summary card -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">🏷️ Order Summary</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        {% if auction.product.image %}
+                            <img src="{{ auction.product.image.url }}"
+                                 style="width:80px;height:80px;object-fit:cover;border-radius:8px;"
+                                 class="me-3">
+                        {% endif %}
+                        <strong>{{ auction.product.title }}</strong>
+                        <p class="text-muted small mb-0">Sold by: {{ auction.product.seller.username }}</p>
+                    </div>
+                    <h4 class="text-success mb-0">₹{{ amount }}</h4>
+                </div>
+                <hr>
+                <div class="d-flex justify-content-between">
+                    <span>Winner</span>
+                    <strong>{{ auction.winner.username }}</strong>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span>Item</span>
+                    <strong>{{ auction.product.title }}</strong>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span>Winning Bid</span>
+                    <strong class="text-success">₹{{ amount }}</strong>
+                </div>
+            </div>
+        </div>
+
+        <!-- Payment options card -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">💳 Choose Payment Method</h5>
+            </div>
+            <div class="card-body p-0">
+
+                <!-- UPI Option -->
+                <div class="payment-option border-bottom p-3 d-flex align-items-center"
+                     onclick="selectPayment(this, 'upi')"
+                     style="cursor:pointer;">
+                    <input type="radio" name="payment" value="upi" class="me-3" id="upi">
+                    <label for="upi" class="d-flex align-items-center w-100 mb-0" style="cursor:pointer;">
+                        <span class="fs-4 me-3">📱</span>
+                        <div>
+                            <strong>UPI</strong>
+                            <p class="text-muted small mb-0">Google Pay, PhonePe, Paytm, BHIM</p>
+                        </div>
+                        <span class="badge bg-success ms-auto">Instant</span>
+                    </label>
+                </div>
+
+                <!-- Credit/Debit Card Option -->
+                <div class="payment-option border-bottom p-3 d-flex align-items-center"
+                     onclick="selectPayment(this, 'card')"
+                     style="cursor:pointer;">
+                    <input type="radio" name="payment" value="card" class="me-3" id="card">
+                    <label for="card" class="d-flex align-items-center w-100 mb-0" style="cursor:pointer;">
+                        <span class="fs-4 me-3">💳</span>
+                        <div>
+                            <strong>Credit / Debit Card</strong>
+                            <p class="text-muted small mb-0">Visa, Mastercard, RuPay</p>
+                        </div>
+                        <span class="badge bg-primary ms-auto">Secure</span>
+                    </label>
+                </div>
+
+                <!-- Net Banking Option -->
+                <div class="payment-option border-bottom p-3 d-flex align-items-center"
+                     onclick="selectPayment(this, 'netbanking')"
+                     style="cursor:pointer;">
+                    <input type="radio" name="payment" value="netbanking" class="me-3" id="netbanking">
+                    <label for="netbanking" class="d-flex align-items-center w-100 mb-0" style="cursor:pointer;">
+                        <span class="fs-4 me-3">🏦</span>
+                        <div>
+                            <strong>Net Banking</strong>
+                            <p class="text-muted small mb-0">All major Indian banks supported</p>
+                        </div>
+                        <span class="badge bg-info text-dark ms-auto">Trusted</span>
+                    </label>
+                </div>
+
+                <!-- Cash on Delivery Option -->
+                <div class="payment-option p-3 d-flex align-items-center"
+                     onclick="selectPayment(this, 'cod')"
+                     style="cursor:pointer;">
+                    <input type="radio" name="payment" value="cod" class="me-3" id="cod">
+                    <label for="cod" class="d-flex align-items-center w-100 mb-0" style="cursor:pointer;">
+                        <span class="fs-4 me-3">💵</span>
+                        <div>
+                            <strong>Cash on Delivery</strong>
+                            <p class="text-muted small mb-0">Pay when you receive the item</p>
+                        </div>
+                        <span class="badge bg-warning text-dark ms-auto">On Delivery</span>
+                    </label>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="d-flex gap-3">
+            <a href="{% url 'payment_cancel' auction.pk %}"
+               class="btn btn-outline-secondary w-50">
+                ← Cancel
+            </a>
+            <button onclick="confirmPayment()"
+                    class="btn btn-success w-50">
+                Pay ₹{{ amount }}
+            </button>
+        </div>
+
+        <p class="text-center text-muted small mt-3">
+            🔒 This is a demo payment page. No real transaction will occur.
+        </p>
+
+    </div>
+</div>
+
+<style>
+    .payment-option:hover {
+        background-color: #f8f9fa;
+    }
+    .payment-option.selected {
+        background-color: #d1e7dd;
+        border-left: 4px solid #198754;
+    }
+</style>
+
+<script>
+    function selectPayment(element, method) {
+        // Remove selected class from all options
+        document.querySelectorAll('.payment-option').forEach(el => {
+            el.classList.remove('selected');
+        });
+
+        // Add selected class to clicked option
+        element.classList.add('selected');
+
+        // Check the radio button
+        document.getElementById(method).checked = true;
+    }
+
+    function confirmPayment() {
+        const selected = document.querySelector('input[name="payment"]:checked');
+
+        if (!selected) {
+            alert('Please select a payment method first.');
+            return;
+        }
+
+        const methods = {
+            'upi': 'UPI',
+            'card': 'Credit/Debit Card',
+            'netbanking': 'Net Banking',
+            'cod': 'Cash on Delivery'
+        };
+
+        const methodName = methods[selected.value];
+        alert(`✅ Demo: You selected ${methodName}.\nIn a real app, payment processing would happen here.`);
+    }
+</script>
+
+{% endblock %}

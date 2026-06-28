@@ -1,0 +1,206 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+{% block title %}{{ auction.product.title }} — Auction{% endblock %}
+{% block content %}
+<div class="row">
+    <!-- Left column: product info -->
+    <div class="col-md-6">
+        {% if auction.product.image %}
+            <img src="{{ auction.product.image.url }}" class="img-fluid rounded shadow">
+        {% endif %}
+        <h2 class="mt-3">{{ auction.product.title }}</h2>
+        <p>{{ auction.product.description }}</p>
+        <p>
+            <span class="badge bg-secondary">{{ auction.get_auction_type_display }}</span>
+            <span class="badge bg-{% if auction.status == 'active' %}success{% else %}danger{% endif %}" id="status-badge">
+                {{ auction.status }}
+            </span>
+        </p>
+        {% if auction.end_time %}
+            <p><strong>Ends:</strong> {{ auction.end_time|date:"d M Y, H:i" }}</p>
+        {% endif %}
+
+        <!-- Winner banner (hidden by default, shown when auction closes) -->
+        <div id="winner-banner" class="alert alert-success d-none">
+            🏆 Winner: <strong id="winner-name"></strong>
+        </div>
+       {% if auction.status == 'closed' and auction.winner %}
+    <div class="alert alert-success">
+        🏆 Winner: <strong>{{ auction.winner.username }}</strong>
+    </div>
+    {% if user == auction.winner %}
+        <a href="{% url 'payment_page' auction.pk %}"
+           class="btn btn-success btn-lg w-100 mt-2">
+            💳 Proceed to Payment →
+        </a>
+    {% endif %}
+{% endif %}
+    </div>
+
+    <!-- Right column: bidding area -->
+    <div class="col-md-6">
+        <div class="card shadow-sm p-3 mb-3">
+
+            <!-- Live price display -->
+            <h4>
+                Current Price:
+                <span class="text-success fw-bold" id="current-price">
+                    ₹{{ auction.get_current_price }}
+                </span>
+            </h4>
+            <p class="text-muted">Starting price: ₹{{ auction.product.starting_price }}</p>
+
+            <!-- Bid stats -->
+            <div class="d-flex gap-3 mb-2">
+                <small class="text-muted">
+                    Total bids: <strong id="bid-count">{{ auction.bids.count }}</strong>
+                </small>
+                <small class="text-muted">
+                    Last bid by: <strong id="latest-bidder">
+                        {% with auction.get_highest_bid as hb %}
+                            {% if hb %}{{ hb.bidder.username }}{% else %}—{% endif %}
+                        {% endwith %}
+                    </strong>
+                </small>
+            </div>
+
+            <!-- Polling status indicator -->
+            <div class="mb-2">
+                <span class="badge bg-success" id="live-badge">🔴 Live updates on</span>
+            </div>
+
+            <!-- Bid form for buyers -->
+            {% if user.is_authenticated and auction.status == 'active' and user != auction.product.seller %}
+                <form method="post" action="{% url 'place_bid' auction.pk %}">
+                    {% csrf_token %}
+                    {{ bid_form|crispy }}
+                    <button class="btn btn-success w-100 mt-1">Place Bid</button>
+                </form>
+
+            <!-- Close button for seller (open auctions only) -->
+            {% elif user == auction.product.seller and auction.auction_type == 'open' and auction.status == 'active' %}
+                <form method="post" action="{% url 'close_auction' auction.pk %}">
+                    {% csrf_token %}
+                    <button class="btn btn-danger w-100">Close Auction</button>
+                </form>
+
+            <!-- Login prompt for guests -->
+            {% elif not user.is_authenticated %}
+                <a href="{% url 'login' %}" class="btn btn-dark w-100">Login to Bid</a>
+            {% endif %}
+        </div>
+
+        <!-- Bid history list -->
+        <h5>Bid History</h5>
+        <ul class="list-group" id="bid-list">
+            {% for bid in bids %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>{{ bid.bidder.username }}</span>
+                    <strong class="text-success">₹{{ bid.amount }}</strong>
+                </li>
+            {% empty %}
+                <li class="list-group-item text-muted">No bids yet. Be the first!</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+
+<!-- AJAX Polling Script -->
+<script>
+    // Auction details from Django template
+    const auctionPk = { auctionpk }; //{{ auction.pk }};
+    const statusUrl = `/auctions/${auctionPk}/status/`;
+
+    // Track last known price to detect changes
+    let lastPrice = "{{ auction.get_current_price }}"; 
+    let lastBidCount = { auctionbidscount }; //{{ auction.bids.count }};
+    let isActive = "{{ auction.status }}" === "active";
+
+    function pollAuction() {
+        // Only poll if auction is still active
+        if (!isActive) return;
+
+        fetch(statusUrl)
+            .then(response => response.json())
+            .then(data => {
+                // Update price if it changed
+                if (data.current_price !== lastPrice) {
+                    // Flash green to show update
+                    const priceEl = document.getElementById('current-price');
+                    priceEl.textContent = '₹' + data.current_price;
+                    priceEl.style.transition = 'color 0.3s';
+                    priceEl.style.color = '#198754';
+                    setTimeout(() => priceEl.style.color = '', 1500);
+                    lastPrice = data.current_price;
+                }
+
+                // Update bid count
+                if (data.bid_count !== lastBidCount) {
+                    document.getElementById('bid-count').textContent = data.bid_count;
+                    lastBidCount = data.bid_count;
+
+                    // Update latest bidder name
+                    if (data.latest_bidder) {
+                        document.getElementById('latest-bidder').textContent = data.latest_bidder;
+                    }
+
+                    // Add new bid to top of bid list
+                    if (data.latest_bidder) {
+                        const bidList = document.getElementById('bid-list');
+
+                        // Remove "no bids" message if present
+                        const emptyMsg = bidList.querySelector('.text-muted');
+                        if (emptyMsg) emptyMsg.closest('li').remove();
+
+                        // Create new bid entry
+                        const newBid = document.createElement('li');
+                        newBid.className = 'list-group-item d-flex justify-content-between align-items-center list-group-item-success';
+                        newBid.innerHTML = `
+                            <span>${data.latest_bidder}</span>
+                            <strong class="text-success">₹${data.current_price}</strong>
+                        `;
+                        bidList.insertBefore(newBid, bidList.firstChild);
+
+                        // Remove green highlight after 2 seconds
+                        setTimeout(() => {
+                            newBid.classList.remove('list-group-item-success');
+                        }, 2000);
+                    }
+                }
+
+                // Handle auction closing
+                if (data.status === 'closed') {
+                    isActive = false;
+
+                    // Update status badge
+                    const badge = document.getElementById('status-badge');
+                    badge.textContent = 'closed';
+                    badge.className = 'badge bg-danger';
+
+                    // Update live indicator
+                    document.getElementById('live-badge').className = 'badge bg-secondary';
+                    document.getElementById('live-badge').textContent = '⚫ Auction ended';
+
+                    // Show winner banner
+                    if (data.winner) {
+                        document.getElementById('winner-name').textContent = data.winner;
+                        document.getElementById('winner-banner').classList.remove('d-none');
+                    }
+                }
+            })
+            .catch(error => {
+                console.log('Poll error:', error);
+                document.getElementById('live-badge').className = 'badge bg-warning';
+                document.getElementById('live-badge').textContent = '⚠️ Connection issue';
+            });
+    }
+
+    // Poll every 3 seconds
+    const pollInterval = setInterval(pollAuction, 3000);
+
+    // Stop polling when user leaves page
+    window.addEventListener('beforeunload', () => {
+        clearInterval(pollInterval);
+    });
+</script>
+{% endblock %}
